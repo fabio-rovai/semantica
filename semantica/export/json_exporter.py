@@ -32,6 +32,7 @@ from ..utils.exceptions import ProcessingError, ValidationError
 from ..utils.helpers import ensure_directory, write_json_file
 from ..utils.logging import get_logger
 from ..utils.progress_tracker import get_progress_tracker
+from .rdf_exporter import SEMANTICA_NS, mint_entity_iri, mint_relationship_iri
 
 
 class JSONExporter:
@@ -265,6 +266,7 @@ class JSONExporter:
         json_data = {
             "@context": {
                 "@vocab": "https://semantica.dev/vocab/",
+                "semantica": SEMANTICA_NS,
                 "entities": {"@id": "semantica:entities", "@container": "@list"},
             },
             "entities": entities,
@@ -294,6 +296,7 @@ class JSONExporter:
         json_data = {
             "@context": {
                 "@vocab": "https://semantica.dev/vocab/",
+                "semantica": SEMANTICA_NS,
                 "relationships": {
                     "@id": "semantica:relationships",
                     "@container": "@list",
@@ -495,7 +498,8 @@ class JSONExporter:
         relationships = kg.get("relationships", [])
         if relationships:
             jsonld["semantica:relationships"] = [
-                self._relationship_to_jsonld(r) for r in relationships
+                self._relationship_to_jsonld(r, index)
+                for index, r in enumerate(relationships)
             ]
             self.logger.debug(
                 f"Converted {len(relationships)} relationship(s) to JSON-LD"
@@ -526,11 +530,13 @@ class JSONExporter:
         Returns:
             Dictionary in JSON-LD format representing the entity
         """
-        # Generate @id if not provided
-        entity_id = entity.get("id")
-        if not entity_id:
-            entity_text = entity.get("text") or entity.get("label", "unknown")
-            entity_id = f"semantica:entity/{entity_text}"
+        # Generate @id if not provided. Minted exactly as the RDF serializers
+        # mint it (#1101), so the JSON-LD and Turtle exports of one knowledge
+        # graph name the same entity with the same IRI. Interpolating the raw
+        # text into f"semantica:entity/{text}" produced an invalid IRI for any
+        # text containing a space, and a JSON-LD parser dropped the whole node.
+        entity_text = entity.get("text") or entity.get("label", "unknown")
+        entity_id = entity.get("id") or mint_entity_iri(entity_text)
 
         jsonld = {
             "@id": entity_id,
@@ -545,7 +551,9 @@ class JSONExporter:
 
         return jsonld
 
-    def _relationship_to_jsonld(self, rel: Dict[str, Any]) -> Dict[str, Any]:
+    def _relationship_to_jsonld(
+        self, rel: Dict[str, Any], index: int = 0
+    ) -> Dict[str, Any]:
         """
         Convert relationship to JSON-LD format.
 
@@ -560,16 +568,18 @@ class JSONExporter:
                 - type: Relationship type (optional)
                 - confidence: Confidence score (optional)
                 - metadata: Metadata dictionary (optional)
+            index: Position of the relationship in the exported list, used when
+                minting an IRI for a relationship that arrived without an id
 
         Returns:
             Dictionary in JSON-LD format representing the relationship
         """
-        # Generate @id if not provided
-        rel_id = rel.get("id")
-        if not rel_id:
-            source_id = rel.get("source_id") or rel.get("source", "")
-            target_id = rel.get("target_id") or rel.get("target", "")
-            rel_id = f"semantica:rel/{source_id}_{target_id}"
+        # Generate @id if not provided, from the same mint the RDF serializers
+        # use, including the list index that separates two relationships
+        # sharing a pair of endpoints (#1101).
+        source_id = rel.get("source_id") or rel.get("source", "")
+        target_id = rel.get("target_id") or rel.get("target", "")
+        rel_id = rel.get("id") or mint_relationship_iri(index, source_id, target_id)
 
         jsonld = {
             "@id": rel_id,
