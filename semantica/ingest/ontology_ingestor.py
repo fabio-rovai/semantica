@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import rdflib
-from rdflib import RDF, RDFS, OWL, Graph
+from rdflib import RDF, RDFS, OWL, Dataset, Graph
 
 from ..utils.exceptions import ProcessingError, ValidationError
 from ..utils.logging import get_logger
@@ -106,15 +106,24 @@ class OntologyIngestor:
                 raise ValidationError(f"File not found: {file_path}")
 
             self.progress.update_tracking(tracking_id, message="Parsing RDF graph...")
-            g = Graph()
-            
+            # `Dataset`, not `Graph`: a JSON-LD document with a top-level `@id` *and*
+            # `@graph` places its terms in a NAMED graph. `Graph.parse()` loads only the
+            # default graph and discards the rest without an error, so every class and
+            # property in such a document was dropped while the load reported success.
+            # Same migration #757 made for JenaStore; the ingest path was not covered by it.
+            # `default_union=True` makes the Dataset itself present triples from every
+            # graph as one merged view (it is an rdflib.Graph subclass, so it satisfies
+            # _convert_to_dict()'s Graph-typed contract directly) instead of copying every
+            # quad into a second in-memory Graph.
+            ds = Dataset(default_union=True)
+
             # Use provided format or let rdflib guess based on extension
             parse_kwargs = kwargs.copy()
             if format:
                 parse_kwargs['format'] = format
-            
+
             try:
-                g.parse(file_path, **parse_kwargs)
+                ds.parse(file_path, **parse_kwargs)
             except Exception as e:
                 # Fallback: try to guess format from extension if not provided and initial parse failed
                 if not format:
@@ -130,11 +139,13 @@ class OntologyIngestor:
                     guessed_fmt = fmt_map.get(ext)
                     if guessed_fmt:
                         self.logger.info(f"Retrying with guessed format: {guessed_fmt}")
-                        g.parse(file_path, format=guessed_fmt, **kwargs)
+                        ds.parse(file_path, format=guessed_fmt, **kwargs)
                     else:
                         raise e
                 else:
                     raise e
+
+            g = ds
 
             self.progress.update_tracking(tracking_id, message="Converting to internal format...")
             
@@ -375,13 +386,25 @@ class OntologyIngestor:
             prop_def["description"] = str(comment)
             
         # Domain and Range
-        domain = graph.value(subject, RDFS.domain)
-        if domain and isinstance(domain, rdflib.URIRef):
-            prop_def["domain"] = str(domain)
-            
-        range_val = graph.value(subject, RDFS.range)
-        if range_val and isinstance(range_val, rdflib.URIRef):
-            prop_def["range"] = str(range_val)
+        domains = sorted(
+            {
+                str(domain)
+                for domain in graph.objects(subject, RDFS.domain)
+                if isinstance(domain, rdflib.URIRef)
+            }
+        )
+        if domains:
+            prop_def["domain"] = domains[0] if len(domains) == 1 else domains
+
+        ranges = sorted(
+            {
+                str(range_val)
+                for range_val in graph.objects(subject, RDFS.range)
+                if isinstance(range_val, rdflib.URIRef)
+            }
+        )
+        if ranges:
+            prop_def["range"] = ranges[0] if len(ranges) == 1 else ranges
             
         properties_dict[uri] = prop_def
 

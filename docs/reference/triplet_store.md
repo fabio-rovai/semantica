@@ -182,7 +182,7 @@ for row in result.bindings:
     store = TripletStore(
         backend="rdf4j",
         endpoint="http://localhost:8080/rdf4j-server",
-        repository_id="semantica",   # passed through **config
+        repository_id="semantica",   # selects the remote repository
     )
     ```
 
@@ -561,7 +561,7 @@ for row in result.bindings:
     print(row)
 ```
 
-- [Export](export) — Export knowledge graphs to RDF formats.
-- [Ontology](ontology) — Load OWL ontologies and store as RDF triples.
-- [Reasoning](reasoning) — SPARQL-based property chain inference.
-- [Graph Store](graph_store) — Property graph alternative for Cypher queries.
+- [Export](/reference/export) — Export knowledge graphs to RDF formats.
+- [Ontology](/reference/ontology) — Load OWL ontologies and store as RDF triples.
+- [Reasoning](/reference/reasoning) — SPARQL-based property chain inference.
+- [Graph Store](/reference/graph_store) — Property graph alternative for Cypher queries.

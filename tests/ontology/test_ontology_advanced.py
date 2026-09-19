@@ -340,6 +340,27 @@ class TestSHACLHierarchicalAndValidation(unittest.TestCase):
         ttl = gen.serialize(graph, format="turtle")
         self.assertIn("myorg.com", ttl)
 
+    # 24a — an RDF namespace ending in `#` must not gain a trailing `/`,
+    # or every generated URI lands in a different namespace and SHACL
+    # validation silently targets nothing.
+    def test_hash_namespace_base_uri_is_not_mangled(self):
+        gen = self._make_gen(base_uri="http://example.org/manufacturing#")
+        self.assertEqual(gen.base_uri, "http://example.org/manufacturing#")
+        self.assertEqual(gen.shapes_uri, "http://example.org/manufacturing#shapes")
+
+        graph = gen.generate(self._HIER_ONTOLOGY)
+        ttl = gen.serialize(graph, format="turtle")
+        self.assertNotIn("#/", ttl)
+        self.assertIn("manufacturing#", ttl)
+
+    # 24b — a `#`-terminated base is preserved verbatim, while slash runs
+    # are collapsed: Qodo review caught that `endswith(("/","#"))` left
+    # `.../ns////` intact, leaking a different namespace into emitted IRIs.
+    def test_slash_run_normalization_regression(self):
+        gen = self._make_gen(base_uri="http://example.org/ns////")
+        self.assertEqual(gen.base_uri, "http://example.org/ns/")
+        self.assertEqual(gen.shapes_uri, "http://example.org/ns/shapes")
+
     # 25
     def test_severity_warning(self):
         gen = self._make_gen(severity="Warning")
@@ -525,6 +546,65 @@ class TestSHACLHierarchicalAndValidation(unittest.TestCase):
             self.assertEqual(mc[0].max_count, 2)
 
     # 33
+    def test_public_run_shacl_validation_api(self):
+        """The public API validates data and retains the legacy alias."""
+        try:
+            import pyshacl  # noqa: F401
+            import rdflib  # noqa: F401
+        except ImportError:
+            self.skipTest("pyshacl/rdflib not installed")
+        from semantica.ontology import run_shacl_validation
+        from semantica.ontology.ontology_validator import _run_pyshacl
+
+        data = "@prefix ex: <http://example.org/> . ex:alice a ex:Person ."
+        shacl = """
+        @prefix ex: <http://example.org/> .
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
+            sh:property [ sh:path ex:name ; sh:minCount 1 ] .
+        """
+        public_report = run_shacl_validation(data, shacl)
+        legacy_report = _run_pyshacl(data, shacl)
+        self.assertFalse(public_report.conforms)
+        self.assertEqual(public_report.violation_count, 1)
+        self.assertEqual(legacy_report.conforms, public_report.conforms)
+        self.assertEqual(legacy_report.violation_count, public_report.violation_count)
+        self.assertEqual(
+            [
+                (v.focus_node, v.result_path, v.constraint, v.severity, v.message)
+                for v in legacy_report.violations
+            ],
+            [
+                (v.focus_node, v.result_path, v.constraint, v.severity, v.message)
+                for v in public_report.violations
+            ],
+        )
+
+    # 34
+    def test_public_run_shacl_validation_conforming_graph(self):
+        """The public API reports a valid graph without violations."""
+        try:
+            import pyshacl  # noqa: F401
+            import rdflib  # noqa: F401
+        except ImportError:
+            self.skipTest("pyshacl/rdflib not installed")
+        from semantica.ontology import run_shacl_validation
+
+        data = """
+        @prefix ex: <http://example.org/> .
+        ex:alice a ex:Person ; ex:name "Alice" .
+        """
+        shacl = """
+        @prefix ex: <http://example.org/> .
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
+            sh:property [ sh:path ex:name ; sh:minCount 1 ] .
+        """
+
+        report = run_shacl_validation(data, shacl)
+
+        self.assertTrue(report.conforms)
+        self.assertEqual(report.violation_count, 0)
     def test_shacl_violation_to_dict(self):
         from semantica.ontology.ontology_validator import SHACLViolation
         v = SHACLViolation(

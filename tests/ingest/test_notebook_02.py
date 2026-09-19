@@ -12,7 +12,6 @@ from semantica.ingest import (
     WebIngestor, ContentExtractor, SitemapCrawler, RobotsChecker,
     FeedIngestor, FeedMonitor,
     StreamIngestor, StreamMonitor,
-    RepoIngestor, CodeExtractor, GitAnalyzer,
     EmailIngestor, AttachmentProcessor,
     DBIngestor, DatabaseConnector,
     MCPIngestor, IngestConfig, ingest_config
@@ -140,6 +139,9 @@ class TestNotebook02DataIngestion:
         assert 'overall' in health
 
     def test_06_repo_ingestion(self):
+        pytest.importorskip("git")
+        from semantica.ingest import CodeExtractor, RepoIngestor
+
         code_extractor = CodeExtractor()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
             tmp.write("class MyClass:\n    def my_method(self):\n        pass")
@@ -157,7 +159,7 @@ class TestNotebook02DataIngestion:
         repo_ingestor = RepoIngestor()
         with patch.object(repo_ingestor, 'ingest_repository') as mock_ingest:
             mock_ingest.return_value = {'name': 'semantica'}
-            repo_data = repo_ingestor.ingest_repository("https://github.com/Hawksight-AI/semantica.git")
+            repo_data = repo_ingestor.ingest_repository("https://github.com/semantica-agi/semantica.git")
             assert repo_data['name'] == 'semantica'
 
     def test_07_email_ingestion(self):

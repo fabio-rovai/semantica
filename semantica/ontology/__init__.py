@@ -133,6 +133,7 @@ License: MIT
 from typing import Any, Dict, List, Optional, Union
 
 from .associative_class import AssociativeClass, AssociativeClassBuilder
+from .bootstrap_schema import bootstrap_schema
 from .class_inferrer import ClassInferrer
 from .competency_questions import CompetencyQuestion, CompetencyQuestionsManager
 from .config import OntologyConfig, ontology_config
@@ -159,7 +160,15 @@ from .ontology_validator import (
     SHACLValidationReport,
     SHACLViolation,
     ValidationResult,
+    run_shacl_validation,
     validate_ontology,
+)
+from .quality_gate import (
+    OntologyQualityGate,
+    OntologyQualityReport,
+    QualityIssue,
+    QualitySeverity,
+    ontology_quality_check,
 )
 from .owl_generator import OWLGenerator
 from .property_generator import PropertyGenerator
@@ -174,6 +183,7 @@ from .methods import ingest_ontology
 __all__ = [
     # Main generators
     "OntologyGenerator",
+    "bootstrap_schema",
     "ClassInferrer",
     "ClassInferencer",  # Legacy alias
     "PropertyGenerator",
@@ -192,6 +202,12 @@ __all__ = [
     "PropertyShape",
     "SHACLValidationReport",
     "SHACLViolation",
+    "run_shacl_validation",
+    "OntologyQualityGate",
+    "OntologyQualityReport",
+    "QualityIssue",
+    "QualitySeverity",
+    "ontology_quality_check",
     # OWL/RDF generation
     "OWLGenerator",
     # Requirements and competency questions
