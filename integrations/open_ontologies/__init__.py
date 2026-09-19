@@ -58,7 +58,7 @@ meaningless:
 
 Compatibility
 -------------
-Requires ``open-ontologies-lite >= 0.4.0``, a pure-Python package over the
+Requires ``open-ontologies-lite >= 0.5.0``, a pure-Python package over the
 Oxigraph engine. No Rust toolchain, no service to run, no network. SHACL needs
 the ``open-ontologies-lite[shacl]`` extra. Every symbol imports without it
 installed; the import happens inside the call.
@@ -109,15 +109,21 @@ def verified_export_rdf(
     from semantica.export.rdf_exporter import RDFExporter
 
     path = Path(file_path)
+    encoding = kwargs.get("encoding", "utf-8")
     RDFExporter().export(data, path, format=format, **kwargs)
 
-    report = verify_rdf(
-        path.read_text(encoding="utf-8"),
-        fmt=format,
-        ontology=ontology,
-        shapes=shapes,
-        policed_namespaces=policed_namespaces,
-    )
+    try:
+        report = verify_rdf(
+            path.read_text(encoding=encoding),
+            fmt=format,
+            ontology=ontology,
+            shapes=shapes,
+            policed_namespaces=policed_namespaces,
+        )
+    except Exception:
+        if raise_on_failure:
+            path.unlink(missing_ok=True)
+        raise
 
     if raise_on_failure and not report.ok:
         path.unlink(missing_ok=True)

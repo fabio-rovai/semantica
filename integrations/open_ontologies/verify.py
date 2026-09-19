@@ -136,9 +136,9 @@ def verify_rdf(
         return report
 
     # 2. Closed-world vocabulary.
-    if ontology or policed_namespaces:
+    if ontology and policed_namespaces:
         vocab = vocab_check(
-            ontology or "",
+            ontology,
             rdf,
             data_format=fmt,
             extra_namespaces=policed_namespaces,

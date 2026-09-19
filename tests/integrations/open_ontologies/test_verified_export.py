@@ -132,3 +132,66 @@ def test_registration_leaves_the_default_method_alone(tmp_path):
     path = tmp_path / "graph.ttl"
     export_rdf(UNSOUND, str(path))
     assert path.exists(), "an existing pipeline must behave exactly as before"
+
+
+def test_verified_export_unlinks_file_on_verify_exception(tmp_path, monkeypatch):
+    """If verification itself raises an exception, the file must be removed when raise_on_failure=True."""
+    path = tmp_path / "graph.ttl"
+
+    def mock_verify(*args, **kwargs):
+        raise RuntimeError("simulated engine failure")
+
+    monkeypatch.setattr("integrations.open_ontologies.verify_rdf", mock_verify)
+    with pytest.raises(RuntimeError, match="simulated engine failure"):
+        verified_export_rdf(SOUND, str(path), raise_on_failure=True)
+    assert not path.exists(), "failed verification must not leave an unverified file behind"
+
+
+def test_verified_export_keeps_file_on_verify_exception_when_raise_on_failure_false(tmp_path, monkeypatch):
+    """When raise_on_failure=False, exceptions during verification still keep the file for debugging."""
+    path = tmp_path / "graph.ttl"
+
+    def mock_verify(*args, **kwargs):
+        raise RuntimeError("simulated engine failure")
+
+    monkeypatch.setattr("integrations.open_ontologies.verify_rdf", mock_verify)
+    with pytest.raises(RuntimeError, match="simulated engine failure"):
+        verified_export_rdf(SOUND, str(path), raise_on_failure=False)
+    assert path.exists(), "file must be kept for surveys/debugging when raise_on_failure=False"
+
+
+def test_verified_export_honors_caller_encoding(tmp_path, monkeypatch):
+    """The read-back verification must respect the encoding used for export."""
+    from pathlib import Path
+
+    path = tmp_path / "graph.ttl"
+    read_encodings = []
+
+    original_read_text = Path.read_text
+
+    def spy_read_text(self, *args, **kwargs):
+        read_encodings.append(kwargs.get("encoding"))
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+    report = verified_export_rdf(SOUND, str(path), encoding="utf-8")
+    assert report.ok
+    assert "utf-8" in read_encodings
+
+
+def test_vocabulary_check_skipped_when_only_ontology_or_namespaces_provided():
+    """Vocabulary check must be skipped unless BOTH ontology and policed_namespaces are provided."""
+    rdf = """
+    @prefix ex: <https://example.org/> .
+    ex:acme a ex:Org .
+    """
+    # Only ontology provided -> skipped
+    report_onto_only = verify_rdf(rdf, ontology=VOCAB)
+    assert not report_onto_only.vocabulary_checked
+    assert report_onto_only.undeclared_terms == []
+
+    # Only policed_namespaces provided -> skipped
+    report_ns_only = verify_rdf(rdf, policed_namespaces=["https://example.org/"])
+    assert not report_ns_only.vocabulary_checked
+    assert report_ns_only.undeclared_terms == []
+
