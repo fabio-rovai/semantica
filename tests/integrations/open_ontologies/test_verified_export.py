@@ -24,10 +24,11 @@ from integrations.open_ontologies import (  # noqa: E402
     verify_rdf,
 )
 
-# The shape GraphBuilder actually produces: id defaults to the surface text,
-# type to the extractor's label.
+# An unsound export: rdflib leniency accepts invalid absolute IRIs (e.g. invalid
+# second fragment '#' or malformed IPv6 host), while strict RDF 1.1 (Oxigraph)
+# refuses them.
 UNSOUND = {
-    "entities": [{"id": "Acme Corp", "text": "Acme Corp", "type": "ORG"}],
+    "entities": [{"id": "http://example.com/##", "text": "Acme Corp", "type": "ORG"}],
     "relationships": [],
 }
 
